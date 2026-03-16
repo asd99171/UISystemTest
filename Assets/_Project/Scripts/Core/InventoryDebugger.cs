@@ -7,6 +7,7 @@ using RPGSystem.Item.Data;
 using RPGSystem.Skill;
 using RPGSystem.Skill.Data;
 using RPGSystem.Stat;
+using RPGSystem.UI;
 
 namespace RPGSystem.Core
 {
@@ -336,6 +337,102 @@ namespace RPGSystem.Core
         public void DebugPrintSockets()
         {
             GemService.Instance?.DebugPrintAllSockets();
+        }
+
+        // ══════════════════════════════════════
+        //  통합 테스트
+        // ══════════════════════════════════════
+
+        // ══════════════════════════════════════
+        //  UI 상태 테스트
+        // ══════════════════════════════════════
+
+        [ContextMenu("UI State/Print Game State")]
+        public void DebugPrintGameState()
+        {
+            if (GameManager.Instance == null) return;
+            var state = GameManager.Instance.CurrentState;
+            Debug.Log($"═══ GAME STATE: {state} ═══");
+            Debug.Log($"  IsPlaying: {GameManager.Instance.IsPlaying}");
+            Debug.Log($"  IsInUI: {GameManager.Instance.IsInUI}");
+            Debug.Log($"  IsInputAllowed: {GameManager.Instance.IsInputAllowed}");
+            Debug.Log($"  Time.timeScale: {Time.timeScale}");
+            Debug.Log($"  Cursor.lockState: {Cursor.lockState}");
+            Debug.Log($"  Cursor.visible: {Cursor.visible}");
+        }
+
+        [ContextMenu("UI State/Toggle Inventory Panel")]
+        public void DebugToggleInventory()
+        {
+            UIManager.Instance?.TogglePanel("Inventory");
+            DebugPrintGameState();
+        }
+
+        [ContextMenu("UI State/Toggle Equipment Panel")]
+        public void DebugToggleEquipment()
+        {
+            UIManager.Instance?.TogglePanel("Equipment");
+            DebugPrintGameState();
+        }
+
+        [ContextMenu("UI State/Toggle Skill Panel")]
+        public void DebugToggleSkill()
+        {
+            UIManager.Instance?.TogglePanel("Skill");
+            DebugPrintGameState();
+        }
+
+        [ContextMenu("UI State/Close All Panels")]
+        public void DebugCloseAllPanels()
+        {
+            UIManager.Instance?.CloseAll();
+            DebugPrintGameState();
+        }
+
+        [ContextMenu("UI State/Print Panel Stack")]
+        public void DebugPrintPanelStack()
+        {
+            UIManager.Instance?.DebugPrintStack();
+        }
+
+        [ContextMenu("UI State/UI Flow Test (Open → Stack → Close)")]
+        public void DebugUIFlowTest()
+        {
+            Debug.Log("╔═══════════════════════════════════╗");
+            Debug.Log("║     UI STATE FLOW TEST            ║");
+            Debug.Log("╚═══════════════════════════════════╝");
+
+            var uiMgr = UIManager.Instance;
+            if (uiMgr == null)
+            {
+                Debug.LogWarning("[Debug] UIManager not found.");
+                return;
+            }
+
+            Debug.Log("── [1] Initial state ──");
+            DebugPrintGameState();
+
+            Debug.Log("── [2] Open Inventory (I) ──");
+            uiMgr.OpenPanel("Inventory");
+            DebugPrintGameState();
+
+            Debug.Log("── [3] Open Equipment (E) while Inventory is open ──");
+            uiMgr.OpenPanel("Equipment");
+            DebugPrintGameState();
+            uiMgr.DebugPrintStack();
+
+            Debug.Log("── [4] ESC: Close top (Equipment) ──");
+            uiMgr.CloseTop();
+            DebugPrintGameState();
+            uiMgr.DebugPrintStack();
+
+            Debug.Log("── [5] ESC: Close top (Inventory) → back to Playing ──");
+            uiMgr.CloseTop();
+            DebugPrintGameState();
+
+            Debug.Log("╔═══════════════════════════════════╗");
+            Debug.Log("║     UI FLOW TEST COMPLETE         ║");
+            Debug.Log("╚═══════════════════════════════════╝");
         }
 
         // ══════════════════════════════════════

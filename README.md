@@ -466,23 +466,40 @@ ESC키 or 닫기 버튼
 │                          PlayerStatManager.cs
 │                          SkillManager.cs
 │                          GemService.cs
-└── InventoryDebugger    ← InventoryDebugger.cs (테스트용, 배포 시 제거)
+├── UIManager            ← UIManager.cs
+├── Canvas (Screen Space - Overlay)
+│   ├── InventoryPanel   ← InventoryPanelPlaceholder.cs (비활성 시작)
+│   ├── EquipmentPanel   ← EquipmentPanelPlaceholder.cs (비활성 시작)
+│   └── SkillPanel       ← SkillPanelPlaceholder.cs (비활성 시작)
+├── Player (1인칭)       ← PlayerInputBlocker.cs
+│   ├── (이동 스크립트)     Inspector에서 playerController에 드래그
+│   └── (카메라 스크립트)   Inspector에서 cameraController에 드래그
+└── InventoryDebugger    ← InventoryDebugger.cs (테스트용)
 ```
 
 ### 단계별 설정
 
-1. **빈 씬**에서 빈 GameObject 3개를 생성하고 위와 같이 이름을 지정한다.
+1. **빈 씬**에서 Hierarchy를 위 구성대로 생성한다.
 2. **GameManager 오브젝트**에 `GameManager.cs` 부착
+   - Inspector: `Lock Cursor On Start` = true (1인칭), `Pause On UI` = true
 3. **SystemManager 오브젝트**에 5개 컴포넌트 부착:
    - `InventoryManager.cs` — Inspector: `Slot Count` = 40, `Item Database`에 SO 드래그
    - `EquipmentManager.cs` — 추가 설정 없음
    - `PlayerStatManager.cs` — Inspector: `Base Stats` 배열의 기본 스탯값 조정
    - `SkillManager.cs` — Inspector: `Skill Database`에 SkillDatabase SO 드래그
    - `GemService.cs` — 추가 설정 없음
-4. **InventoryDebugger 오브젝트**에 `InventoryDebugger.cs` 부착 (테스트용)
-   - `Test Items` 배열에 테스트할 ItemData SO들을 드래그
-   - `Test Skills` 배열에 SkillData SO들을 드래그
-   - `Test Gems` 배열에 GemData SO들을 드래그
+4. **UIManager 오브젝트**에 `UIManager.cs` 부착
+   - Inspector: `Panel Registry` 배열에 3개 패널 드래그 (아래 5번 참조)
+   - 키 설정: I=Inventory, E=Equipment, K=Skill, ESC=Close
+5. **Canvas** 생성 → 아래에 3개 패널 GameObject 생성 (각각 비활성):
+   - InventoryPanel에 `InventoryPanelPlaceholder.cs` 부착, panelName = "Inventory"
+   - EquipmentPanel에 `EquipmentPanelPlaceholder.cs` 부착, panelName = "Equipment"
+   - SkillPanel에 `SkillPanelPlaceholder.cs` 부착, panelName = "Skill"
+6. **Player 오브젝트**에 `PlayerInputBlocker.cs` 부착
+   - Inspector: `Player Controller`에 이동 스크립트 드래그
+   - Inspector: `Camera Controller`에 카메라 스크립트 드래그
+7. **InventoryDebugger 오브젝트**에 `InventoryDebugger.cs` 부착 (테스트용)
+   - `Test Items`, `Test Skills`, `Test Gems` 배열 설정
 
 ### 테스트 키 바인딩
 
@@ -634,3 +651,87 @@ GemService.Instance.DetachGem(skill, 0);
    - `Gem/Add Test Gems` → 인벤토리에 잼 추가
    - `Gem/Attach First Gem` → 잼 장착, 스킬 데미지 변화 확인
    - `Full Test/Skill + Gem Full Flow` → 전체 흐름 한번에 실행
+
+### UI 모드 전환 시스템
+
+#### 상태 전환 흐름
+
+```
+Playing (게임 중)
+  │
+  ├── I키 → UIManager.TogglePanel("Inventory")
+  │          → UIManager.OpenPanel() → GameManager.SetState(UI)
+  │            → Time.timeScale = 0
+  │            → Cursor.lockState = None, visible = true
+  │            → GameStateChangedEvent 발행
+  │              → PlayerInputBlocker: 이동/카메라 스크립트 disabled
+  │
+  ├── E키 → 장비 패널 (위와 동일)
+  ├── K키 → 스킬 패널 (위와 동일)
+  │
+  └── ESC → 열린 패널이 없으면 Paused 토글
+
+UI (UI 열림)
+  │
+  ├── ESC → UIManager.CloseTop() (스택 최상위 닫기)
+  │         → 스택이 비면 → GameManager.SetState(Playing)
+  │           → Time.timeScale = 1
+  │           → Cursor.lockState = Locked, visible = false
+  │           → PlayerInputBlocker: 이동/카메라 스크립트 enabled
+  │
+  ├── I키 → 인벤토리가 열려있으면 닫기, 아니면 열기
+  └── 여러 패널 동시 열기 가능 (스택 관리)
+```
+
+#### 패널 스택 동작
+
+```
+[1] I키 → Inventory 열림 (스택: [Inventory])      → GameState.UI
+[2] E키 → Equipment 열림 (스택: [Inventory, Equipment]) → 유지 UI
+[3] ESC → Equipment 닫힘 (스택: [Inventory])       → 유지 UI
+[4] ESC → Inventory 닫힘 (스택: [])                → GameState.Playing
+```
+
+#### Time.timeScale 주의사항
+
+- `Time.timeScale = 0`이면 `Update()`는 호출되지만 `FixedUpdate()`는 멈춤
+- **UI 애니메이션**: `Animator.updateMode = AnimatorUpdateMode.UnscaledTime` 설정 필요
+- **UI 입력**: `Input.GetKeyDown()`은 timeScale=0에서도 정상 동작
+- **코루틴**: `WaitForSeconds`는 멈추지만 `WaitForSecondsRealtime`은 동작
+- **DOTween 등**: `.SetUpdate(true)`로 unscaled time 사용 가능
+
+#### 1인칭 컨트롤러 연결 방법
+
+**방법 1: PlayerInputBlocker (권장)**
+```csharp
+// Player 오브젝트에 PlayerInputBlocker 부착
+// Inspector에서 이동/카메라 스크립트 드래그
+// → UI 열면 자동으로 enabled = false
+```
+
+**방법 2: GameManager.IsInputAllowed 확인**
+```csharp
+void Update() {
+    if (!GameManager.Instance.IsInputAllowed) return;
+    // 이동 로직
+    float h = Input.GetAxis("Horizontal");
+    float v = Input.GetAxis("Vertical");
+    // ...
+}
+```
+
+**방법 3: GameStateChangedEvent 구독**
+```csharp
+void OnEnable() {
+    EventBus.Subscribe<GameStateChangedEvent>(OnStateChanged);
+}
+void OnStateChanged(GameStateChangedEvent e) {
+    enabled = e.newState == GameState.Playing;
+}
+```
+
+#### UI 상태 테스트 (ContextMenu)
+
+- `UI State/Print Game State` — 현재 상태, timeScale, 커서 상태 출력
+- `UI State/Toggle Inventory/Equipment/Skill` — 패널 토글
+- `UI State/UI Flow Test` — 열기→스택→ESC닫기 전체 흐름 자동 테스트

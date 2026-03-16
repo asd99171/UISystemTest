@@ -104,4 +104,25 @@ namespace RPGSystem.Core
         public int socketIndex;
         public GemData gem;
     }
+
+    // ──────────────── 게임 상태 / UI 이벤트 ────────────────
+
+    /// <summary>게임 상태가 변경됨 (Playing/UI/Paused)</summary>
+    public struct GameStateChangedEvent
+    {
+        public GameState previousState;
+        public GameState newState;
+    }
+
+    /// <summary>UI 패널이 열림</summary>
+    public struct UIPanelOpenedEvent
+    {
+        public string panelName;
+    }
+
+    /// <summary>UI 패널이 닫힘</summary>
+    public struct UIPanelClosedEvent
+    {
+        public string panelName;
+    }
 }
