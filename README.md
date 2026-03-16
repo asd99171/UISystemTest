@@ -451,3 +451,58 @@ ESC키 or 닫기 버튼
 | 툴팁 위치 | RectTransformUtility.ScreenPointToLocalPointInRectangle |
 | 직렬화 | JsonUtility 또는 Newtonsoft.Json (저장/불러오기) |
 | 이벤트 | C# event/Action 기반 EventBus (외부 에셋 불필요) |
+
+---
+
+## 10. 설치 및 설정 방법
+
+### 씬 구성 (필수 GameObject)
+
+```
+[Hierarchy]
+├── GameManager          ← GameManager.cs
+├── InventoryManager     ← InventoryManager.cs
+├── EquipmentManager     ← EquipmentManager.cs
+└── InventoryDebugger    ← InventoryDebugger.cs (테스트용, 배포 시 제거)
+```
+
+### 단계별 설정
+
+1. **빈 씬**에서 빈 GameObject 4개를 생성하고 위와 같이 이름을 지정한다.
+2. **GameManager 오브젝트**에 `GameManager.cs` 부착
+3. **InventoryManager 오브젝트**에 `InventoryManager.cs` 부착
+   - Inspector에서 `Slot Count` = 40 (기본값)
+   - `Item Database`에 ItemDatabase SO를 드래그
+4. **EquipmentManager 오브젝트**에 `EquipmentManager.cs` 부착
+5. **InventoryDebugger 오브젝트**에 `InventoryDebugger.cs` 부착 (테스트용)
+   - `Test Items` 배열에 테스트할 ItemData SO들을 드래그
+
+### 테스트 키 바인딩
+
+| 키 | 기능 |
+|----|------|
+| `1~9` | 테스트 아이템 선택 |
+| `F1` | 선택한 아이템 추가 |
+| `F2` | 테스트 슬롯에서 아이템 제거 |
+| `F3` | 테스트 슬롯 아이템 사용 |
+| `F4` | 인벤토리 콘솔 출력 |
+| `F5` | 인벤토리 정렬 |
+
+### ContextMenu (Inspector 우클릭)
+
+InventoryManager, EquipmentManager, InventoryDebugger 모두 ContextMenu를 제공한다.
+Inspector에서 컴포넌트 이름을 우클릭하면 디버그 메뉴가 나타난다.
+
+### 이벤트 구독 (UI 연동 시)
+
+```csharp
+// UI 스크립트에서
+void OnEnable() {
+    EventBus.Subscribe<InventoryChangedEvent>(OnSlotChanged);
+    EventBus.Subscribe<InventoryRefreshEvent>(OnFullRefresh);
+}
+void OnDisable() {
+    EventBus.Unsubscribe<InventoryChangedEvent>(OnSlotChanged);
+    EventBus.Unsubscribe<InventoryRefreshEvent>(OnFullRefresh);
+}
+```
