@@ -461,21 +461,22 @@ ESC키 or 닫기 버튼
 ```
 [Hierarchy]
 ├── GameManager          ← GameManager.cs
-├── InventoryManager     ← InventoryManager.cs
-├── EquipmentManager     ← EquipmentManager.cs
+├── SystemManager        ← InventoryManager.cs
+│                          EquipmentManager.cs
+│                          PlayerStatManager.cs
 └── InventoryDebugger    ← InventoryDebugger.cs (테스트용, 배포 시 제거)
 ```
 
 ### 단계별 설정
 
-1. **빈 씬**에서 빈 GameObject 4개를 생성하고 위와 같이 이름을 지정한다.
+1. **빈 씬**에서 빈 GameObject 3개를 생성하고 위와 같이 이름을 지정한다.
 2. **GameManager 오브젝트**에 `GameManager.cs` 부착
-3. **InventoryManager 오브젝트**에 `InventoryManager.cs` 부착
-   - Inspector에서 `Slot Count` = 40 (기본값)
-   - `Item Database`에 ItemDatabase SO를 드래그
-4. **EquipmentManager 오브젝트**에 `EquipmentManager.cs` 부착
-5. **InventoryDebugger 오브젝트**에 `InventoryDebugger.cs` 부착 (테스트용)
-   - `Test Items` 배열에 테스트할 ItemData SO들을 드래그
+3. **SystemManager 오브젝트**에 3개 컴포넌트 부착:
+   - `InventoryManager.cs` — Inspector에서 `Slot Count` = 40, `Item Database`에 SO 드래그
+   - `EquipmentManager.cs` — 추가 설정 없음
+   - `PlayerStatManager.cs` — Inspector에서 `Base Stats` 배열의 기본 스탯값 조정
+4. **InventoryDebugger 오브젝트**에 `InventoryDebugger.cs` 부착 (테스트용)
+   - `Test Items` 배열에 테스트할 ItemData SO들을 드래그 (무기, 갑옷, 반지 포함)
 
 ### 테스트 키 바인딩
 
@@ -484,14 +485,21 @@ ESC키 or 닫기 버튼
 | `1~9` | 테스트 아이템 선택 |
 | `F1` | 선택한 아이템 추가 |
 | `F2` | 테스트 슬롯에서 아이템 제거 |
-| `F3` | 테스트 슬롯 아이템 사용 |
+| `F3` | 테스트 슬롯 아이템 사용 (장비면 장착) |
 | `F4` | 인벤토리 콘솔 출력 |
 | `F5` | 인벤토리 정렬 |
+| `F6` | 장비 슬롯 콘솔 출력 |
+| `F7` | 최종 스탯 콘솔 출력 |
 
 ### ContextMenu (Inspector 우클릭)
 
-InventoryManager, EquipmentManager, InventoryDebugger 모두 ContextMenu를 제공한다.
+InventoryManager, EquipmentManager, PlayerStatManager, InventoryDebugger 모두 ContextMenu 제공.
 Inspector에서 컴포넌트 이름을 우클릭하면 디버그 메뉴가 나타난다.
+
+주요 디버그 메뉴:
+- `Equip Test` — 장비 아이템 추가 → 자동 장착 → 스탯 변화 확인
+- `Ring Slot Test` — 반지 3개 추가하여 Ring1/Ring2 자동 배치 + 교체 검증
+- `Full Flow Test` — 스탯 Before → 장착 → 스탯 After → 해제 → 스탯 복귀 전체 흐름
 
 ### 이벤트 구독 (UI 연동 시)
 
@@ -500,9 +508,36 @@ Inspector에서 컴포넌트 이름을 우클릭하면 디버그 메뉴가 나�
 void OnEnable() {
     EventBus.Subscribe<InventoryChangedEvent>(OnSlotChanged);
     EventBus.Subscribe<InventoryRefreshEvent>(OnFullRefresh);
+    EventBus.Subscribe<EquipmentChangedEvent>(OnEquipChanged);
+    EventBus.Subscribe<StatChangedEvent>(OnStatChanged);
 }
 void OnDisable() {
     EventBus.Unsubscribe<InventoryChangedEvent>(OnSlotChanged);
     EventBus.Unsubscribe<InventoryRefreshEvent>(OnFullRefresh);
+    EventBus.Unsubscribe<EquipmentChangedEvent>(OnEquipChanged);
+    EventBus.Unsubscribe<StatChangedEvent>(OnStatChanged);
 }
 ```
+
+### 장비 슬롯 처리 방식
+
+| 아이템 타입 | 장착 슬롯 | 결정 방식 |
+|------------|----------|----------|
+| WeaponData | Weapon | 자동 (타입 매칭) |
+| SubWeaponData | OffHand | 자동 (타입 매칭) |
+| ArmorData (equipSlot=Helmet) | Helmet | SO의 equipSlot 필드 |
+| ArmorData (equipSlot=Chest) | Chest | SO의 equipSlot 필드 |
+| ArmorData (equipSlot=Legs) | Legs | SO의 equipSlot 필드 |
+| ArmorData (equipSlot=Boots) | Boots | SO의 equipSlot 필드 |
+| ArmorData (equipSlot=Ring1/Ring2) | Ring1 or Ring2 | 자동 배치 (빈 슬롯 우선) |
+
+### 스탯 계산 공식
+
+```
+최종값 = (기본값 + Flat 보너스 합계) × (1 + Percent 보너스 합계)
+```
+
+- 기본값: PlayerStatManager의 baseStats
+- Flat 보너스: 장비의 attackPower, defense + StatModifier(Flat)
+- Percent 보너스: StatModifier(Percent)
+- 장비 변경 시 자동 재계산 (EquipmentChangedEvent → Recalculate)
