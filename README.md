@@ -468,9 +468,10 @@ ESC키 or 닫기 버튼
 │                          GemService.cs
 ├── UIManager            ← UIManager.cs
 ├── Canvas (Screen Space - Overlay)
-│   ├── InventoryPanel   ← InventoryPanelPlaceholder.cs (비활성 시작)
-│   ├── EquipmentPanel   ← EquipmentPanelPlaceholder.cs (비활성 시작)
-│   └── SkillPanel       ← SkillPanelPlaceholder.cs (비활성 시작)
+│   ├── InventoryPanel   ← InventoryUIController.cs (비활성 시작)
+│   ├── EquipmentPanel   ← EquipmentUIController.cs (비활성 시작)
+│   ├── SkillPanel       ← SkillUIController.cs (비활성 시작)
+│   └── Tooltip          ← TooltipUI.cs (비활성 시작)
 ├── Player (1인칭)       ← PlayerInputBlocker.cs
 │   ├── (이동 스크립트)     Inspector에서 playerController에 드래그
 │   └── (카메라 스크립트)   Inspector에서 cameraController에 드래그
@@ -492,9 +493,10 @@ ESC키 or 닫기 버튼
    - Inspector: `Panel Registry` 배열에 3개 패널 드래그 (아래 5번 참조)
    - 키 설정: I=Inventory, E=Equipment, K=Skill, ESC=Close
 5. **Canvas** 생성 → 아래에 3개 패널 GameObject 생성 (각각 비활성):
-   - InventoryPanel에 `InventoryPanelPlaceholder.cs` 부착, panelName = "Inventory"
-   - EquipmentPanel에 `EquipmentPanelPlaceholder.cs` 부착, panelName = "Equipment"
-   - SkillPanel에 `SkillPanelPlaceholder.cs` 부착, panelName = "Skill"
+   - InventoryPanel에 `InventoryUIController.cs` 부착, panelName = "Inventory"
+   - EquipmentPanel에 `EquipmentUIController.cs` 부착, panelName = "Equipment"
+   - SkillPanel에 `SkillUIController.cs` 부착, panelName = "Skill"
+   - Tooltip에 `TooltipUI.cs` 부착 (비활성 시작)
 6. **Player 오브젝트**에 `PlayerInputBlocker.cs` 부착
    - Inspector: `Player Controller`에 이동 스크립트 드래그
    - Inspector: `Camera Controller`에 카메라 스크립트 드래그
@@ -735,3 +737,152 @@ void OnStateChanged(GameStateChangedEvent e) {
 - `UI State/Print Game State` — 현재 상태, timeScale, 커서 상태 출력
 - `UI State/Toggle Inventory/Equipment/Skill` — 패널 토글
 - `UI State/UI Flow Test` — 열기→스택→ESC닫기 전체 흐름 자동 테스트
+
+---
+
+## Phase 7: 실제 UI 컨트롤러 스크립트
+
+### 개요
+
+Placeholder 패널을 대체하는 실제 UI 컨트롤러와 슬롯 UI 스크립트.
+데이터를 직접 저장하지 않고, Manager에서 읽어와 표시만 한다.
+TextMeshPro + EventSystem 기반, 클릭/우클릭/더블클릭 지원.
+
+### 파일 목록
+
+| 파일 | 경로 | 역할 |
+|------|------|------|
+| **UISlotBase.cs** | `UI/Common/` | 모든 슬롯 UI의 추상 베이스. 아이콘, 수량, 선택, 클릭/호버 처리 |
+| **TooltipUI.cs** | `UI/Common/` | 아이템/스킬 툴팁 팝업. 마우스 추적, 화면 밖 보정 |
+| **InventorySlotUI.cs** | `UI/Inventory/` | 인벤토리 개별 슬롯. 아이콘+수량, 우클릭=사용, 호버=툴팁 |
+| **InventoryUIController.cs** | `UI/Inventory/` | 인벤토리 패널. 슬롯 그리드 동적 생성, 선택→교환, 이벤트 구독 |
+| **EquipmentSlotUI.cs** | `UI/Equipment/` | 장비 개별 슬롯. EquipSlotType 지정, 우클릭=해제 |
+| **EquipmentUIController.cs** | `UI/Equipment/` | 장비 패널. 8개 고정 슬롯 + 스탯 요약 텍스트 |
+| **SkillSlotUI.cs** | `UI/Skill/` | 스킬 개별 항목. 이름, 레벨, 숙련도바, 소켓 상태 |
+| **SkillUIController.cs** | `UI/Skill/` | 스킬 패널. 동적 리스트 재생성, 상세 정보 표시 |
+
+### 씬 Hierarchy
+
+```
+Canvas (Screen Space - Overlay)
+├── InventoryPanel                ← InventoryUIController (panelName="Inventory")
+│   └── SlotContainer            ← Grid Layout Group (Cell: 80x80, Spacing: 4)
+│       └── (InventorySlotUI가 동적 생성)
+│
+├── EquipmentPanel                ← EquipmentUIController (panelName="Equipment")
+│   ├── WeaponSlot               ← EquipmentSlotUI (slotType=Weapon)
+│   ├── OffHandSlot              ← EquipmentSlotUI (slotType=OffHand)
+│   ├── HelmetSlot               ← EquipmentSlotUI (slotType=Helmet)
+│   ├── ChestSlot                ← EquipmentSlotUI (slotType=Chest)
+│   ├── LegsSlot                 ← EquipmentSlotUI (slotType=Legs)
+│   ├── BootsSlot                ← EquipmentSlotUI (slotType=Boots)
+│   ├── Ring1Slot                ← EquipmentSlotUI (slotType=Ring1)
+│   ├── Ring2Slot                ← EquipmentSlotUI (slotType=Ring2)
+│   └── StatSummaryText          ← TMP_Text (스탯 요약)
+│
+├── SkillPanel                    ← SkillUIController (panelName="Skill")
+│   ├── SlotContainer            ← Vertical Layout Group
+│   │   └── (SkillSlotUI가 동적 생성)
+│   └── DetailText               ← TMP_Text (선택 스킬 상세)
+│
+└── Tooltip                       ← TooltipUI (기본 비활성)
+    ├── NameText                  ← TMP_Text
+    ├── TypeText                  ← TMP_Text
+    ├── Icon                      ← Image
+    ├── DescriptionText           ← TMP_Text
+    └── StatsText                 ← TMP_Text
+```
+
+### Prefab 구조
+
+#### InventorySlotUI Prefab
+```
+InventorySlot (Button/Image)       ← InventorySlotUI
+├── Icon (Image)                   → iconImage
+├── QuantityText (TMP_Text)        → quantityText (우하단)
+├── SelectionFrame (Image)         → selectionFrame (테두리, 비활성)
+└── EmptyBG (Image)                → emptyBackground (빈 슬롯 배경)
+```
+
+#### EquipmentSlotUI (씬에 직접 배치)
+```
+WeaponSlot (Button/Image)          ← EquipmentSlotUI (slotType=Weapon)
+├── Icon (Image)                   → iconImage
+├── SlotLabel (TMP_Text)           → slotLabel ("Weapon")
+├── SelectionFrame (Image)         → selectionFrame
+└── EmptyBG (Image)                → emptyBackground
+```
+
+#### SkillSlotUI Prefab
+```
+SkillSlot (Button/Image)           ← SkillSlotUI
+├── Icon (Image)                   → iconImage
+├── SkillName (TMP_Text)           → skillNameText
+├── LevelText (TMP_Text)           → levelText ("Lv.3")
+├── TypeLabel (TMP_Text)           → typeLabel ("Active")
+├── ProficiencyBar (Image, fill)   → proficiencyBar
+├── SocketText (TMP_Text)          → socketText ("2/3")
+├── SelectionFrame (Image)         → selectionFrame
+└── EmptyBG (Image)                → emptyBackground
+```
+
+### Inspector 설정 순서
+
+1. **InventoryUIController** (InventoryPanel에 부착)
+   - `panelName` = "Inventory"
+   - `slotPrefab` ← InventorySlotUI Prefab 드래그
+   - `slotContainer` ← SlotContainer Transform 드래그
+
+2. **EquipmentUIController** (EquipmentPanel에 부착)
+   - `panelName` = "Equipment"
+   - `equipmentSlots` ← 8개의 EquipmentSlotUI 드래그 (순서 무관)
+   - `statSummaryText` ← StatSummaryText TMP 드래그
+
+3. **SkillUIController** (SkillPanel에 부착)
+   - `panelName` = "Skill"
+   - `slotPrefab` ← SkillSlotUI Prefab 드래그
+   - `slotContainer` ← SlotContainer Transform 드래그
+   - `detailText` ← DetailText TMP 드래그
+
+4. **TooltipUI** (Tooltip 오브젝트에 부착)
+   - `tooltipRect` ← 자신의 RectTransform 드래그
+   - `itemNameText`, `iconImage`, `descriptionText`, `statsText` 연결
+
+5. **UIManager** 업데이트
+   - `panelRegistry`에 InventoryUIController, EquipmentUIController, SkillUIController 등록
+   - (기존 Placeholder 대신 새 Controller가 UIPanel을 상속하므로 호환)
+
+### 슬롯 상호작용
+
+| 대상 | 좌클릭 | 우클릭 | 더블클릭 | 호버 |
+|------|--------|--------|----------|------|
+| **인벤토리 슬롯** | 선택 (두 번째 선택 시 교환) | 아이템 사용 | 아이템 사용 | 툴팁 |
+| **장비 슬롯** | 선택 | 장비 해제 | 장비 해제 | 툴팁 |
+| **스킬 슬롯** | 선택 (상세 표시) | 스킬 사용 | 스킬 사용 | 툴팁 |
+
+### 이벤트 구독 관계
+
+```
+InventoryUIController:
+  ├── InventoryChangedEvent  → 단일 슬롯 갱신
+  └── InventoryRefreshEvent  → 전체 갱신
+
+EquipmentUIController:
+  ├── EquipmentChangedEvent  → 장비 슬롯 전체 갱신
+  └── StatChangedEvent       → 스탯 요약 텍스트 갱신
+
+SkillUIController:
+  ├── SkillListChangedEvent  → 슬롯 목록 재생성
+  ├── SkillLevelUpEvent      → 전체 갱신 + 상세 갱신
+  ├── SkillUsedEvent         → 전체 갱신 (숙련도 변화)
+  ├── GemAttachedEvent       → 전체 갱신
+  └── GemDetachedEvent       → 전체 갱신
+```
+
+### 주의사항
+
+- **TextMeshPro 패키지** 필수: Window → Package Manager → TextMeshPro 설치
+- **EventSystem** 필수: Hierarchy에 EventSystem 오브젝트가 있어야 클릭 동작
+- UI 컨트롤러들은 `UIPanel`을 상속하므로 기존 UIManager와 완전 호환
+- 패널 GameObject는 **비활성(SetActive=false)** 상태로 시작
+- Tooltip은 **별도 Canvas** 또는 높은 Sort Order로 설정하면 항상 최상위 렌더링
