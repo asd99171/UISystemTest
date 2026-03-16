@@ -464,6 +464,8 @@ ESC키 or 닫기 버튼
 ├── SystemManager        ← InventoryManager.cs
 │                          EquipmentManager.cs
 │                          PlayerStatManager.cs
+│                          SkillManager.cs
+│                          GemService.cs
 └── InventoryDebugger    ← InventoryDebugger.cs (테스트용, 배포 시 제거)
 ```
 
@@ -471,12 +473,16 @@ ESC키 or 닫기 버튼
 
 1. **빈 씬**에서 빈 GameObject 3개를 생성하고 위와 같이 이름을 지정한다.
 2. **GameManager 오브젝트**에 `GameManager.cs` 부착
-3. **SystemManager 오브젝트**에 3개 컴포넌트 부착:
-   - `InventoryManager.cs` — Inspector에서 `Slot Count` = 40, `Item Database`에 SO 드래그
+3. **SystemManager 오브젝트**에 5개 컴포넌트 부착:
+   - `InventoryManager.cs` — Inspector: `Slot Count` = 40, `Item Database`에 SO 드래그
    - `EquipmentManager.cs` — 추가 설정 없음
-   - `PlayerStatManager.cs` — Inspector에서 `Base Stats` 배열의 기본 스탯값 조정
+   - `PlayerStatManager.cs` — Inspector: `Base Stats` 배열의 기본 스탯값 조정
+   - `SkillManager.cs` — Inspector: `Skill Database`에 SkillDatabase SO 드래그
+   - `GemService.cs` — 추가 설정 없음
 4. **InventoryDebugger 오브젝트**에 `InventoryDebugger.cs` 부착 (테스트용)
-   - `Test Items` 배열에 테스트할 ItemData SO들을 드래그 (무기, 갑옷, 반지 포함)
+   - `Test Items` 배열에 테스트할 ItemData SO들을 드래그
+   - `Test Skills` 배열에 SkillData SO들을 드래그
+   - `Test Gems` 배열에 GemData SO들을 드래그
 
 ### 테스트 키 바인딩
 
@@ -490,16 +496,21 @@ ESC키 or 닫기 버튼
 | `F5` | 인벤토리 정렬 |
 | `F6` | 장비 슬롯 콘솔 출력 |
 | `F7` | 최종 스탯 콘솔 출력 |
+| `F8` | 스킬 목록 콘솔 출력 |
+| `F9` | 첫 번째 스킬 사용 (숙련도 +EXP) |
+| `F10` | 첫 번째 스킬에 경험치 추가 |
 
 ### ContextMenu (Inspector 우클릭)
 
-InventoryManager, EquipmentManager, PlayerStatManager, InventoryDebugger 모두 ContextMenu 제공.
-Inspector에서 컴포넌트 이름을 우클릭하면 디버그 메뉴가 나타난다.
+모든 매니저와 InventoryDebugger에서 ContextMenu 제공.
+InventoryDebugger는 카테고리별로 정리:
 
-주요 디버그 메뉴:
-- `Equip Test` — 장비 아이템 추가 → 자동 장착 → 스탯 변화 확인
-- `Ring Slot Test` — 반지 3개 추가하여 Ring1/Ring2 자동 배치 + 교체 검증
-- `Full Flow Test` — 스탯 Before → 장착 → 스탯 After → 해제 → 스탯 복귀 전체 흐름
+- **Inventory/** — 아이템 추가/제거/정렬
+- **Equipment/** — 장비 장착/해제
+- **Stats/** — 스탯 출력
+- **Skill/** — 스킬 습득/사용/경험치/레벨업
+- **Gem/** — 잼 추가/장착/해제
+- **Full Test/** — 스킬+잼 전체 흐름 테스트
 
 ### 이벤트 구독 (UI 연동 시)
 
@@ -510,12 +521,20 @@ void OnEnable() {
     EventBus.Subscribe<InventoryRefreshEvent>(OnFullRefresh);
     EventBus.Subscribe<EquipmentChangedEvent>(OnEquipChanged);
     EventBus.Subscribe<StatChangedEvent>(OnStatChanged);
+    EventBus.Subscribe<SkillListChangedEvent>(OnSkillListChanged);
+    EventBus.Subscribe<SkillLevelUpEvent>(OnSkillLevelUp);
+    EventBus.Subscribe<GemAttachedEvent>(OnGemAttached);
+    EventBus.Subscribe<GemDetachedEvent>(OnGemDetached);
 }
 void OnDisable() {
     EventBus.Unsubscribe<InventoryChangedEvent>(OnSlotChanged);
     EventBus.Unsubscribe<InventoryRefreshEvent>(OnFullRefresh);
     EventBus.Unsubscribe<EquipmentChangedEvent>(OnEquipChanged);
     EventBus.Unsubscribe<StatChangedEvent>(OnStatChanged);
+    EventBus.Unsubscribe<SkillListChangedEvent>(OnSkillListChanged);
+    EventBus.Unsubscribe<SkillLevelUpEvent>(OnSkillLevelUp);
+    EventBus.Unsubscribe<GemAttachedEvent>(OnGemAttached);
+    EventBus.Unsubscribe<GemDetachedEvent>(OnGemDetached);
 }
 ```
 
@@ -541,3 +560,77 @@ void OnDisable() {
 - Flat 보너스: 장비의 attackPower, defense + StatModifier(Flat)
 - Percent 보너스: StatModifier(Percent)
 - 장비 변경 시 자동 재계산 (EquipmentChangedEvent → Recalculate)
+
+### 스킬 시스템
+
+#### 스킬 종류 (SkillType)
+
+| 타입 | 설명 | 숙련도 경험치 |
+|------|------|-------------|
+| Active | 공격 스킬 (데미지 적용) | 사용 시 획득 |
+| Buff | 버프 스킬 (스탯 효과) | 사용 시 획득 |
+| Passive | 패시브 (항상 적용) | 사용 불가 (직접 AddExp) |
+
+#### 숙련도 시스템
+
+```
+스킬 사용 → expPerUse 만큼 경험치 증가
+  → currentExp >= requiredExp 이면 레벨업
+    → 필요 경험치: baseExpPerLevel × (level + 1)
+    → 레벨업 시 소켓 해금 체크
+    → 남은 경험치 다음 레벨에 이월
+```
+
+#### 잼 소켓 해금
+
+SkillData SO에서 `socketUnlockLevels` 배열로 설정:
+- 예: `[1, 3, 5]` → Lv.1에서 Socket[0], Lv.3에서 Socket[1], Lv.5에서 Socket[2] 해금
+
+#### 잼 효과 반영
+
+```
+최종 데미지 = baseDamage × (1 + damageScale × level) × (1 + 잼 damageBonus 합)
+최종 쿨다운 = cooldown - 잼 cooldownReduction 합 (최소 0.1초)
+버프 효과 = baseStatEffects + 잼 statModifiers (합산)
+```
+
+#### 스킬 사용 코드 예시
+
+```csharp
+// 전투 시스템에서
+var skill = SkillManager.Instance.GetSkillByIndex(0);
+SkillManager.Instance.UseSkill(skill);
+// → 숙련도 EXP 증가
+// → SkillUsedEvent 발행 (damage, cooldown, mpCost 포함)
+// → 레벨업 시 SkillLevelUpEvent 발행 + 소켓 자동 해금
+
+// 잼 장착
+var gemItem = InventoryManager.Instance.Slots[3].item; // 인벤토리의 잼
+GemService.Instance.AttachGem(skill, 0, gemItem);
+// → 인벤토리에서 잼 1개 제거
+// → 소켓에 잼 데이터 저장
+// → 스킬 데미지/쿨다운에 잼 효과 반영
+
+// 잼 해제
+GemService.Instance.DetachGem(skill, 0);
+// → 소켓에서 잼 제거
+// → 인벤토리에 잼 1개 반환
+```
+
+### Unity 테스트 절차
+
+1. **SO 생성**: Create → RPG System → Skills → Skill
+   - `skillId`: "fireball", `skillName`: "파이어볼"
+   - `skillType`: Active, `baseDamage`: 30, `cooldown`: 3, `mpCost`: 15
+   - `maxGemSockets`: 3, `socketUnlockLevels`: [1, 3, 5]
+   - `maxProficiencyLevel`: 10, `baseExpPerLevel`: 100, `expPerUse`: 10
+2. **잼 SO 생성**: Create → RPG System → Items → Gem
+   - "화염의 잼": `skillDamageBonus`: 0.1, `cooldownReduction`: 0.3
+3. **SkillDatabase SO 생성**: 스킬 등록
+4. **Inspector 설정**: InventoryDebugger에 testSkills, testGems 배열 설정
+5. **Play → ContextMenu**:
+   - `Skill/Learn All Test Skills` → 스킬 습득
+   - `Skill/Use First Skill x10` → 10회 사용하여 숙련도 상승 확인
+   - `Gem/Add Test Gems` → 인벤토리에 잼 추가
+   - `Gem/Attach First Gem` → 잼 장착, 스킬 데미지 변화 확인
+   - `Full Test/Skill + Gem Full Flow` → 전체 흐름 한번에 실행

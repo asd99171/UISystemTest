@@ -1,22 +1,31 @@
 using UnityEngine;
 using RPGSystem.Equipment;
+using RPGSystem.Gem;
 using RPGSystem.Inventory;
+using RPGSystem.Item;
 using RPGSystem.Item.Data;
+using RPGSystem.Skill;
+using RPGSystem.Skill.Data;
 using RPGSystem.Stat;
 
 namespace RPGSystem.Core
 {
     /// <summary>
-    /// 인벤토리 + 장비 + 스탯 통합 테스트 컴포넌트.
-    /// Inspector에서 테스트 아이템을 등록하고 ContextMenu / 키보드로 테스트한다.
+    /// 인벤토리 + 장비 + 스킬 + 잼 통합 테스트 컴포넌트.
     ///
     /// [GameObject] "InventoryDebugger" 빈 오브젝트에 부착.
-    /// [Inspector] testItems 배열에 SO 아이템들 등록.
+    /// [Inspector] testItems, testSkills, testGems 배열 설정.
     /// </summary>
     public class InventoryDebugger : MonoBehaviour
     {
         [Header("테스트 아이템 (Inspector에서 SO 드래그)")]
         [SerializeField] private ItemData[] testItems;
+
+        [Header("테스트 스킬 (Inspector에서 SkillData SO 드래그)")]
+        [SerializeField] private SkillData[] testSkills;
+
+        [Header("테스트 잼 (Inspector에서 GemData SO 드래그)")]
+        [SerializeField] private GemData[] testGems;
 
         [Header("키 바인딩")]
         [SerializeField] private KeyCode addItemKey = KeyCode.F1;
@@ -26,10 +35,14 @@ namespace RPGSystem.Core
         [SerializeField] private KeyCode sortKey = KeyCode.F5;
         [SerializeField] private KeyCode printEquipKey = KeyCode.F6;
         [SerializeField] private KeyCode printStatsKey = KeyCode.F7;
+        [SerializeField] private KeyCode printSkillsKey = KeyCode.F8;
+        [SerializeField] private KeyCode useSkillKey = KeyCode.F9;
+        [SerializeField] private KeyCode addSkillExpKey = KeyCode.F10;
 
         [Header("설정")]
         [SerializeField] private int addAmount = 1;
         [SerializeField] private int testSlotIndex = 0;
+        [SerializeField] private int debugExpAmount = 50;
 
         private int _currentTestItemIndex;
 
@@ -42,6 +55,9 @@ namespace RPGSystem.Core
             if (Input.GetKeyDown(sortKey))       DebugSort();
             if (Input.GetKeyDown(printEquipKey)) DebugPrintEquipment();
             if (Input.GetKeyDown(printStatsKey)) DebugPrintStats();
+            if (Input.GetKeyDown(printSkillsKey)) DebugPrintSkills();
+            if (Input.GetKeyDown(useSkillKey))   DebugUseFirstSkill();
+            if (Input.GetKeyDown(addSkillExpKey)) DebugAddExpToFirstSkill();
 
             // 숫자키 1~9로 테스트 아이템 선택
             for (int i = 0; i < 9 && i < testItems.Length; i++)
@@ -54,11 +70,11 @@ namespace RPGSystem.Core
             }
         }
 
-        // ──────────────────────────────────────
-        // 인벤토리 테스트
-        // ──────────────────────────────────────
+        // ══════════════════════════════════════
+        //  인벤토리 테스트
+        // ══════════════════════════════════════
 
-        [ContextMenu("Debug: Add Current Test Item")]
+        [ContextMenu("Inventory/Add Current Test Item")]
         public void DebugAddCurrentItem()
         {
             if (testItems == null || testItems.Length == 0)
@@ -70,7 +86,7 @@ namespace RPGSystem.Core
             InventoryManager.Instance.AddItem(item, addAmount);
         }
 
-        [ContextMenu("Debug: Add All Test Items")]
+        [ContextMenu("Inventory/Add All Test Items")]
         public void DebugAddAllItems()
         {
             if (testItems == null) return;
@@ -81,38 +97,38 @@ namespace RPGSystem.Core
             }
         }
 
-        [ContextMenu("Debug: Remove From Test Slot")]
+        [ContextMenu("Inventory/Remove From Test Slot")]
         public void DebugRemoveFromSlot()
         {
             InventoryManager.Instance.RemoveItem(testSlotIndex, 1);
         }
 
-        [ContextMenu("Debug: Use From Test Slot (Equip if Equipment)")]
+        [ContextMenu("Inventory/Use From Test Slot")]
         public void DebugUseFromSlot()
         {
             InventoryManager.Instance.UseItem(testSlotIndex);
         }
 
-        [ContextMenu("Debug: Print Inventory")]
+        [ContextMenu("Inventory/Print Inventory")]
         public void DebugPrint()
         {
             InventoryManager.Instance.DebugPrintInventory();
         }
 
-        [ContextMenu("Debug: Sort")]
+        [ContextMenu("Inventory/Sort")]
         public void DebugSort()
         {
             InventoryManager.Instance.SortInventory();
         }
 
-        [ContextMenu("Debug: Swap Slots 0↔1")]
+        [ContextMenu("Inventory/Swap Slots 0↔1")]
         public void DebugSwapSlots()
         {
             InventoryManager.Instance.SwapSlots(0, 1);
             Debug.Log("[Debug] Swapped slots 0 and 1");
         }
 
-        [ContextMenu("Debug: Fill Inventory")]
+        [ContextMenu("Inventory/Fill Inventory")]
         public void DebugFillInventory()
         {
             if (testItems == null || testItems.Length == 0) return;
@@ -127,29 +143,25 @@ namespace RPGSystem.Core
             Debug.Log("[Debug] Inventory filled.");
         }
 
-        // ──────────────────────────────────────
-        // 장비 테스트
-        // ──────────────────────────────────────
+        // ══════════════════════════════════════
+        //  장비 테스트
+        // ══════════════════════════════════════
 
-        [ContextMenu("Debug: Print Equipment")]
+        [ContextMenu("Equipment/Print Equipment")]
         public void DebugPrintEquipment()
         {
-            if (EquipmentManager.Instance != null)
-                EquipmentManager.Instance.DebugPrintEquipment();
+            EquipmentManager.Instance?.DebugPrintEquipment();
         }
 
-        [ContextMenu("Debug: Unequip All")]
+        [ContextMenu("Equipment/Unequip All")]
         public void DebugUnequipAll()
         {
-            if (EquipmentManager.Instance != null)
-                EquipmentManager.Instance.UnequipAll();
+            EquipmentManager.Instance?.UnequipAll();
         }
 
-        [ContextMenu("Debug: Equip Test - Add Weapon + Armor + Use")]
+        [ContextMenu("Equipment/Equip Test - Add & Equip All")]
         public void DebugEquipTest()
         {
-            Debug.Log("═══════ EQUIP TEST START ═══════");
-
             var inv = InventoryManager.Instance;
             foreach (var item in testItems)
             {
@@ -161,8 +173,6 @@ namespace RPGSystem.Core
                     inv.AddItem(item, 1);
                 }
             }
-
-            // 인벤토리의 장비를 순서대로 사용(장착)
             for (int i = 0; i < inv.SlotCount; i++)
             {
                 var slot = inv.Slots[i];
@@ -175,94 +185,213 @@ namespace RPGSystem.Core
                     inv.UseItem(i);
                 }
             }
-
-            Debug.Log("═══════ EQUIP TEST END ═══════");
-
             DebugPrintEquipment();
             DebugPrintStats();
         }
 
-        [ContextMenu("Debug: Ring Slot Test - Add 3 Rings")]
-        public void DebugRingTest()
-        {
-            Debug.Log("═══════ RING TEST START ═══════");
-            Debug.Log("Adding 3 rings: Ring1 빈→Ring1, Ring2 빈→Ring2, 둘다 참→Ring1 교체");
+        // ══════════════════════════════════════
+        //  스탯 테스트
+        // ══════════════════════════════════════
 
-            var inv = InventoryManager.Instance;
-            int ringCount = 0;
-
-            foreach (var item in testItems)
-            {
-                if (item == null) continue;
-                if (item is ArmorData armor
-                    && (armor.equipSlot == EquipSlotType.Ring1
-                        || armor.equipSlot == EquipSlotType.Ring2))
-                {
-                    inv.AddItem(item, 1);
-                    ringCount++;
-                    if (ringCount >= 3) break;
-                }
-            }
-
-            // 인벤토리의 반지를 순서대로 사용(장착)
-            for (int i = 0; i < inv.SlotCount; i++)
-            {
-                var slot = inv.Slots[i];
-                if (slot.IsEmpty) continue;
-                if (slot.item.data is ArmorData a
-                    && (a.equipSlot == EquipSlotType.Ring1
-                        || a.equipSlot == EquipSlotType.Ring2))
-                {
-                    Debug.Log($"  Using ring: {slot.item.data.itemName}");
-                    inv.UseItem(i);
-                }
-            }
-
-            Debug.Log("═══════ RING TEST END ═══════");
-            DebugPrintEquipment();
-        }
-
-        // ──────────────────────────────────────
-        // 스탯 테스트
-        // ──────────────────────────────────────
-
-        [ContextMenu("Debug: Print Stats")]
+        [ContextMenu("Stats/Print Stats")]
         public void DebugPrintStats()
         {
-            if (PlayerStatManager.Instance != null)
-                PlayerStatManager.Instance.DebugPrintStats();
+            PlayerStatManager.Instance?.DebugPrintStats();
         }
 
-        [ContextMenu("Debug: Full Flow Test (Add → Equip → Stats)")]
-        public void DebugFullFlowTest()
+        // ══════════════════════════════════════
+        //  스킬 테스트
+        // ══════════════════════════════════════
+
+        [ContextMenu("Skill/Learn All Test Skills")]
+        public void DebugLearnAllSkills()
         {
-            Debug.Log("╔═══════════════════════════════════════╗");
-            Debug.Log("║       FULL FLOW TEST                  ║");
-            Debug.Log("╚═══════════════════════════════════════╝");
+            if (testSkills == null || testSkills.Length == 0)
+            {
+                // 폴백: SkillManager의 데이터베이스에서
+                SkillManager.Instance?.DebugLearnAllSkills();
+                return;
+            }
+            foreach (var skill in testSkills)
+            {
+                if (skill != null)
+                    SkillManager.Instance?.LearnSkill(skill);
+            }
+        }
 
-            // 1) 스탯 before
-            Debug.Log("── [1] BEFORE equipping ──");
-            DebugPrintStats();
+        [ContextMenu("Skill/Print Skills")]
+        public void DebugPrintSkills()
+        {
+            SkillManager.Instance?.DebugPrintSkills();
+        }
 
-            // 2) 모든 장비 아이템 추가 + 장착
-            Debug.Log("── [2] Adding & equipping all equipment ──");
-            DebugEquipTest();
+        [ContextMenu("Skill/Use First Skill")]
+        public void DebugUseFirstSkill()
+        {
+            SkillManager.Instance?.DebugUseFirstSkill();
+        }
 
-            // 3) 스탯 after
-            Debug.Log("── [3] AFTER equipping ──");
-            DebugPrintStats();
+        [ContextMenu("Skill/Add 50 EXP to First Skill")]
+        public void DebugAddExpToFirstSkill()
+        {
+            if (SkillManager.Instance == null || SkillManager.Instance.SkillCount == 0)
+            {
+                Debug.LogWarning("[Debug] No skills learned.");
+                return;
+            }
+            SkillManager.Instance.AddExp(
+                SkillManager.Instance.GetSkillByIndex(0),
+                debugExpAmount);
+        }
 
-            // 4) 전체 해제
-            Debug.Log("── [4] Unequipping all ──");
-            DebugUnequipAll();
+        [ContextMenu("Skill/Max Level First Skill")]
+        public void DebugMaxLevelFirstSkill()
+        {
+            SkillManager.Instance?.DebugMaxLevelFirst();
+        }
 
-            // 5) 스탯 after unequip
-            Debug.Log("── [5] AFTER unequipping ──");
-            DebugPrintStats();
+        [ContextMenu("Skill/Use First Skill x10 (Proficiency Test)")]
+        public void DebugUseFirstSkillRepeat()
+        {
+            var mgr = SkillManager.Instance;
+            if (mgr == null || mgr.SkillCount == 0) return;
 
-            Debug.Log("╔═══════════════════════════════════════╗");
-            Debug.Log("║       FULL FLOW TEST COMPLETE         ║");
-            Debug.Log("╚═══════════════════════════════════════╝");
+            var skill = mgr.GetSkillByIndex(0);
+            Debug.Log($"═══ Using '{skill.data.skillName}' 10 times ═══");
+            for (int i = 0; i < 10; i++)
+            {
+                mgr.UseSkill(skill);
+            }
+            Debug.Log($"═══ After 10 uses: Lv.{skill.proficiency.level} " +
+                      $"EXP:{skill.proficiency.currentExp}/{skill.proficiency.RequiredExp} ═══");
+        }
+
+        // ══════════════════════════════════════
+        //  잼 테스트
+        // ══════════════════════════════════════
+
+        [ContextMenu("Gem/Add Test Gems to Inventory")]
+        public void DebugAddGems()
+        {
+            if (testGems == null || testGems.Length == 0)
+            {
+                Debug.LogWarning("[Debug] No test gems configured!");
+                return;
+            }
+            foreach (var gem in testGems)
+            {
+                if (gem != null)
+                    InventoryManager.Instance.AddItem(gem, 3);
+            }
+            Debug.Log($"[Debug] Added {testGems.Length} gem types (x3 each) to inventory.");
+        }
+
+        [ContextMenu("Gem/Attach First Gem to First Skill Socket 0")]
+        public void DebugAttachGem()
+        {
+            var skillMgr = SkillManager.Instance;
+            var gemSvc = GemService.Instance;
+            var inv = InventoryManager.Instance;
+            if (skillMgr == null || gemSvc == null || inv == null) return;
+
+            if (skillMgr.SkillCount == 0)
+            {
+                Debug.LogWarning("[Debug] No skills learned.");
+                return;
+            }
+
+            // 인벤토리에서 첫 번째 잼 찾기
+            ItemInstance gemItem = null;
+            for (int i = 0; i < inv.SlotCount; i++)
+            {
+                if (!inv.Slots[i].IsEmpty && inv.Slots[i].item.data.itemType == ItemType.Gem)
+                {
+                    gemItem = inv.Slots[i].item;
+                    break;
+                }
+            }
+
+            if (gemItem == null)
+            {
+                Debug.LogWarning("[Debug] No gems in inventory. Use 'Add Test Gems' first.");
+                return;
+            }
+
+            var skill = skillMgr.GetSkillByIndex(0);
+            gemSvc.AttachGem(skill, 0, gemItem);
+        }
+
+        [ContextMenu("Gem/Detach All Gems from First Skill")]
+        public void DebugDetachAllGems()
+        {
+            var skillMgr = SkillManager.Instance;
+            var gemSvc = GemService.Instance;
+            if (skillMgr == null || gemSvc == null) return;
+            if (skillMgr.SkillCount == 0) return;
+
+            gemSvc.DetachAllGems(skillMgr.GetSkillByIndex(0));
+        }
+
+        [ContextMenu("Gem/Print All Sockets")]
+        public void DebugPrintSockets()
+        {
+            GemService.Instance?.DebugPrintAllSockets();
+        }
+
+        // ══════════════════════════════════════
+        //  통합 테스트
+        // ══════════════════════════════════════
+
+        [ContextMenu("Full Test/Skill + Gem Full Flow")]
+        public void DebugSkillGemFullFlow()
+        {
+            Debug.Log("╔═══════════════════════════════════════════╗");
+            Debug.Log("║     SKILL + GEM FULL FLOW TEST            ║");
+            Debug.Log("╚═══════════════════════════════════════════╝");
+
+            // 1) 스킬 습득
+            Debug.Log("── [1] Learning skills ──");
+            DebugLearnAllSkills();
+
+            // 2) 스킬 사용 x5 (숙련도 쌓기)
+            Debug.Log("── [2] Using first skill 5 times ──");
+            var mgr = SkillManager.Instance;
+            if (mgr != null && mgr.SkillCount > 0)
+            {
+                var skill = mgr.GetSkillByIndex(0);
+                for (int i = 0; i < 5; i++)
+                    mgr.UseSkill(skill);
+            }
+
+            // 3) 경험치 대량 추가 → 레벨업 + 소켓 해금
+            Debug.Log("── [3] Adding 500 EXP (level up + socket unlock) ──");
+            if (mgr != null && mgr.SkillCount > 0)
+                mgr.AddExp(mgr.GetSkillByIndex(0), 500);
+
+            // 4) 잼 추가
+            Debug.Log("── [4] Adding gems to inventory ──");
+            DebugAddGems();
+
+            // 5) 잼 장착
+            Debug.Log("── [5] Attaching gem ──");
+            DebugAttachGem();
+
+            // 6) 스킬 상태 확인 (잼 효과 반영)
+            Debug.Log("── [6] Final skill status ──");
+            DebugPrintSkills();
+            DebugPrintSockets();
+
+            // 7) 잼 해제
+            Debug.Log("── [7] Detaching gems ──");
+            DebugDetachAllGems();
+
+            // 8) 잼 해제 후 스킬 상태
+            Debug.Log("── [8] After gem detach ──");
+            DebugPrintSkills();
+
+            Debug.Log("╔═══════════════════════════════════════════╗");
+            Debug.Log("║     FULL FLOW TEST COMPLETE               ║");
+            Debug.Log("╚═══════════════════════════════════════════╝");
         }
     }
 }

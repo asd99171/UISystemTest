@@ -2,6 +2,7 @@ using RPGSystem.Equipment;
 using RPGSystem.Inventory;
 using RPGSystem.Item;
 using RPGSystem.Item.Data;
+using RPGSystem.Skill;
 
 namespace RPGSystem.Core
 {
@@ -57,4 +58,50 @@ namespace RPGSystem.Core
 
     /// <summary>최종 스탯이 변경됨 (장비 변경, 버프 등) → UI가 구독하여 표시 갱신</summary>
     public struct StatChangedEvent { }
+
+    // ──────────────── 스킬 이벤트 ────────────────
+
+    /// <summary>새로운 스킬을 습득함</summary>
+    public struct SkillLearnedEvent
+    {
+        public SkillInstance skill;
+    }
+
+    /// <summary>스킬 목록이 변경됨 (습득/삭제)</summary>
+    public struct SkillListChangedEvent { }
+
+    /// <summary>스킬이 사용됨 (전투 시스템이 구독하여 데미지/효과 적용)</summary>
+    public struct SkillUsedEvent
+    {
+        public SkillInstance skill;
+        public float damage;
+        public float cooldown;
+        public float mpCost;
+    }
+
+    /// <summary>스킬 숙련도 레벨업 발생</summary>
+    public struct SkillLevelUpEvent
+    {
+        public SkillInstance skill;
+        public int newLevel;
+        public int newSocketsUnlocked;
+    }
+
+    // ──────────────── 잼 이벤트 ────────────────
+
+    /// <summary>잼이 스킬 소켓에 장착됨</summary>
+    public struct GemAttachedEvent
+    {
+        public SkillInstance skill;
+        public int socketIndex;
+        public GemData gem;
+    }
+
+    /// <summary>잼이 스킬 소켓에서 해제됨</summary>
+    public struct GemDetachedEvent
+    {
+        public SkillInstance skill;
+        public int socketIndex;
+        public GemData gem;
+    }
 }
