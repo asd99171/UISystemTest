@@ -13,10 +13,20 @@ namespace RPGSystem.UI
     /// - 아이콘 + 수량 텍스트 표시
     /// - 선택 상태 하이라이트
     /// - 클릭(좌/우) + 더블클릭 감지 (IPointerClickHandler)
+    /// - PointerEnter / PointerMove / PointerExit → 툴팁 표시/추적/숨김
+    ///
+    /// 포인터 이벤트 흐름:
+    ///   OnPointerEnter → OnHoverEnter()   → 서브클래스에서 TooltipUI.ShowItem() 호출
+    ///   OnPointerMove  → TooltipUI.UpdateMousePosition() 직접 호출 (위치 추적)
+    ///   OnPointerExit  → OnHoverExit()    → 서브클래스에서 TooltipUI.Hide() 호출
     ///
     /// [GameObject] 슬롯 Prefab에 부착. Image(아이콘), TMP_Text(수량), Image(선택 프레임) 자식 필요.
     /// </summary>
-    public abstract class UISlotBase : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, IPointerExitHandler
+    public abstract class UISlotBase : MonoBehaviour,
+        IPointerClickHandler,
+        IPointerEnterHandler,
+        IPointerExitHandler,
+        IPointerMoveHandler
     {
         [Header("슬롯 UI 요소")]
         [Tooltip("아이템/스킬 아이콘 이미지")]
@@ -138,7 +148,15 @@ namespace RPGSystem.UI
 
         public void OnPointerEnter(PointerEventData eventData)
         {
+            // 최초 진입 시 마우스 위치를 툴팁에 전달
+            TooltipUI.Instance?.UpdateMousePosition(eventData.position);
             OnHoverEnter();
+        }
+
+        public void OnPointerMove(PointerEventData eventData)
+        {
+            // 마우스 이동 중 툴팁 위치를 실시간 갱신
+            TooltipUI.Instance?.UpdateMousePosition(eventData.position);
         }
 
         public void OnPointerExit(PointerEventData eventData)

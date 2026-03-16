@@ -785,12 +785,23 @@ Canvas (Screen Space - Overlay)
 │   │   └── (SkillSlotUI가 동적 생성)
 │   └── DetailText               ← TMP_Text (선택 스킬 상세)
 │
-└── Tooltip                       ← TooltipUI (기본 비활성)
-    ├── NameText                  ← TMP_Text
-    ├── TypeText                  ← TMP_Text
-    ├── Icon                      ← Image
-    ├── DescriptionText           ← TMP_Text
-    └── StatsText                 ← TMP_Text
+└── Tooltip                       ← TooltipUI (기본 비활성, 높은 Sort Order)
+    ├── MainPanel                 ← RectTransform (mainTooltipRect)
+    │   ├── NameText              ← TMP_Text (nameText)
+    │   ├── TypeText              ← TMP_Text (typeText)
+    │   ├── Icon                  ← Image (iconImage)
+    │   ├── EquipSlotText         ← TMP_Text (equipSlotText, 장비 부위)
+    │   ├── PrimaryStatsText      ← TMP_Text (primaryStatsText)
+    │   ├── ModifierStatsText     ← TMP_Text (modifierStatsText)
+    │   ├── SpecialEffectText     ← TMP_Text (specialEffectText)
+    │   ├── DescriptionText       ← TMP_Text (descriptionText)
+    │   ├── DetailDescText        ← TMP_Text (detailDescText)
+    │   └── SellPriceText         ← TMP_Text (sellPriceText)
+    │
+    └── ComparePanel              ← GameObject (comparePanel, 장비 비교용)
+        ├── CompareLabelText      ← TMP_Text ("— Currently Equipped —")
+        ├── CompareNameText       ← TMP_Text (현재 장착 이름)
+        └── CompareStatsText      ← TMP_Text (비교 diff)
 ```
 
 ### Prefab 구조
@@ -845,8 +856,13 @@ SkillSlot (Button/Image)           ← SkillSlotUI
    - `detailText` ← DetailText TMP 드래그
 
 4. **TooltipUI** (Tooltip 오브젝트에 부착)
-   - `tooltipRect` ← 자신의 RectTransform 드래그
-   - `itemNameText`, `iconImage`, `descriptionText`, `statsText` 연결
+   - `mainTooltipRect` ← MainPanel의 RectTransform 드래그
+   - `nameText`, `typeText`, `iconImage` 연결
+   - `equipSlotText`, `primaryStatsText`, `modifierStatsText` 연결
+   - `specialEffectText`, `descriptionText`, `detailDescText`, `sellPriceText` 연결
+   - `comparePanel` ← ComparePanel GameObject 드래그
+   - `compareRect` ← ComparePanel의 RectTransform 드래그
+   - `compareNameText`, `compareStatsText`, `compareLabelText` 연결
 
 5. **UIManager** 업데이트
    - `panelRegistry`에 InventoryUIController, EquipmentUIController, SkillUIController 등록
@@ -886,3 +902,173 @@ SkillUIController:
 - UI 컨트롤러들은 `UIPanel`을 상속하므로 기존 UIManager와 완전 호환
 - 패널 GameObject는 **비활성(SetActive=false)** 상태로 시작
 - Tooltip은 **별도 Canvas** 또는 높은 Sort Order로 설정하면 항상 최상위 렌더링
+
+---
+
+## 툴팁 시스템 상세 (TooltipUI)
+
+### 개요
+
+아이템/스킬에 마우스를 올리면 리치 텍스트 포맷의 툴팁이 표시된다.
+장비 아이템이면 현재 장착 중인 같은 슬롯 아이템과 비교 수치가 함께 표시된다.
+
+### 핵심 기능
+
+| 기능 | 설명 |
+|------|------|
+| 아이템 정보 표시 | 이름(등급 색상), 타입, 장착 부위, 핵심 스탯, 모디파이어, 특수효과, 설명, 판매가 |
+| 스킬 정보 표시 | 이름, 타입/레벨, 데미지/쿨다운/MP, 숙련도, 잼 소켓 상세 |
+| 장비 비교 | 현재 장착 아이템과 스탯 차이를 녹색(상승)/빨강(하락)으로 표시 |
+| 마우스 추적 | PointerMove 이벤트로 실시간 위치 갱신 (Input.mousePosition 폴링 없음) |
+| 화면 밖 보정 | 4방향(우하→좌하→우상→좌상) 후보를 탐색하여 화면 안에 배치 |
+
+### 포인터 이벤트 흐름
+
+```
+UISlotBase (IPointerEnterHandler, IPointerMoveHandler, IPointerExitHandler)
+  │
+  ├─ OnPointerEnter(eventData)
+  │   ├─ TooltipUI.UpdateMousePosition(eventData.position)  ← 초기 위치 설정
+  │   └─ OnHoverEnter()  ← 서브클래스 override
+  │       └─ InventorySlotUI: TooltipUI.Instance.ShowItem(_currentItem)
+  │       └─ EquipmentSlotUI: TooltipUI.Instance.ShowItem(_equippedItem)
+  │       └─ SkillSlotUI:     TooltipUI.Instance.ShowSkill(_currentSkill)
+  │
+  ├─ OnPointerMove(eventData)   ← 마우스 이동 중 매 프레임 호출
+  │   └─ TooltipUI.UpdateMousePosition(eventData.position)
+  │       └─ UpdatePosition()  ← 4방향 탐색 + 클램프
+  │
+  └─ OnPointerExit(eventData)
+      └─ OnHoverExit()  ← 서브클래스 override
+          └─ TooltipUI.Instance.Hide()
+```
+
+### 툴팁 표시 영역 구성
+
+```
+┌──────────────────────────────────┐
+│ ★ 드래곤 슬레이어       Legendary │  ← nameText (등급 색상)
+│ Weapon · Legendary                │  ← typeText
+│ [Icon]                            │  ← iconImage
+│ Equip: Weapon                     │  ← equipSlotText (노랑)
+│───────────────────────────────────│
+│ ATK  120                          │  ← primaryStatsText
+│ Attack Speed  1.2                 │
+│ Gem Sockets: 3                    │
+│───────────────────────────────────│
+│ CritRate +8%                      │  ← modifierStatsText (녹색/빨강)
+│ CritDamage +15%                   │
+│───────────────────────────────────│
+│ 고대 드래곤의 뼈로 만든 검        │  ← descriptionText
+│ 사용자에게 드래곤의 힘을 부여한다  │  ← detailDescText
+│───────────────────────────────────│
+│ Sell: 5000G                       │  ← sellPriceText (금색)
+└──────────────────────────────────┘
+
+ 장비 아이템이면 비교 패널 추가:
+
+┌──────────────────────────────────┐
+│ — Currently Equipped —           │  ← compareLabelText
+│ 강철 장검                  Rare  │  ← compareNameText (등급 색상)
+│──────────────────────────────────│
+│ ATK       80 → 120  (+40)       │  ← compareStatsText
+│ AtkSpd   1.5 → 1.2  (-0.3)     │    녹색 = 상승, 빨강 = 하락
+│ CritRate  3% → 8%   (+5%)      │
+│ CritDmg   0% → 15%  (+15%)     │
+└──────────────────────────────────┘
+```
+
+### 비교 로직 상세
+
+1. 인벤토리의 장비 아이템에 호버 → `ShowItem()` 호출
+2. `ResolveTargetSlot()`으로 해당 장비가 들어갈 슬롯 결정
+   - WeaponData → Weapon 슬롯
+   - SubWeaponData → OffHand 슬롯
+   - ArmorData → equipSlot 필드 (Ring1/Ring2 포함)
+3. `EquipmentManager.GetEquipped(slot)`으로 현재 장착 아이템 조회
+4. 주요 스탯 비교 (ATK, DEF, AttackSpeed):
+   - `현재값 → 새 값  (차이)` 형식으로 표시
+5. 모디파이어 비교 (StatModifier[]):
+   - Flat/Percent 별도 합산 후 차이 계산
+   - 모든 등장 StatType에 대해 비교
+
+### 색상 코드
+
+| 용도 | 색상 | Hex |
+|------|------|-----|
+| 스탯 상승 | 녹색 | `#00FF88` |
+| 스탯 하락 | 빨강 | `#FF4444` |
+| 보조 텍스트 | 회색 | `#AAAAAA` |
+| 장착 부위 | 노랑 | `#FFCC00` |
+| 특수 효과 | 하늘 | `#66CCFF` |
+| 골드 가격 | 금색 | `#FFD700` |
+
+### Unity 세팅 방법
+
+#### 1. Tooltip 오브젝트 구성
+
+```
+Canvas (Sort Order: 100)           ← 최상위 렌더링
+└── Tooltip                        ← TooltipUI 컴포넌트 부착
+    ├── MainPanel                  ← Vertical Layout Group + Content Size Fitter
+    │   │                            (Horizontal Fit: Preferred, Vertical Fit: Preferred)
+    │   │                            배경 Image (반투명 검정, #000000CC)
+    │   │
+    │   ├── NameText               ← TMP_Text (Bold, 18pt)
+    │   ├── TypeText               ← TMP_Text (12pt, 회색)
+    │   ├── Icon                   ← Image (48x48, 선택)
+    │   ├── EquipSlotText          ← TMP_Text (14pt)
+    │   ├── Separator1             ← Image (height=1, 구분선)
+    │   ├── PrimaryStatsText       ← TMP_Text (14pt, Rich Text 활성)
+    │   ├── ModifierStatsText      ← TMP_Text (13pt, Rich Text 활성)
+    │   ├── SpecialEffectText      ← TMP_Text (13pt)
+    │   ├── Separator2             ← Image (height=1)
+    │   ├── DescriptionText        ← TMP_Text (12pt)
+    │   ├── DetailDescText         ← TMP_Text (12pt, 이탤릭)
+    │   └── SellPriceText          ← TMP_Text (12pt)
+    │
+    └── ComparePanel               ← Vertical Layout Group + Content Size Fitter
+        │                            배경 Image (반투명 검정, #111111CC)
+        │                            Anchor: MainPanel 오른쪽에 배치
+        │
+        ├── CompareLabelText       ← TMP_Text (11pt, 회색)
+        ├── CompareNameText        ← TMP_Text (Bold, 16pt)
+        └── CompareStatsText       ← TMP_Text (13pt, Rich Text 활성)
+```
+
+#### 2. RectTransform 설정
+
+- **MainPanel**: Pivot (0, 1) = 좌상단 기준, 너비 280~320px
+- **ComparePanel**: Pivot (0, 1), MainPanel 오른쪽에 4px 간격
+- **Tooltip 루트**: Pivot (0, 1), Anchor (0, 0)
+
+#### 3. Content Size Fitter 설정
+
+MainPanel과 ComparePanel 모두:
+- Horizontal Fit: **Min Size** 또는 **Preferred Size**
+- Vertical Fit: **Preferred Size**
+- Layout Element에 Min Width 설정 (예: 280)
+
+#### 4. TMP_Text 공통 설정
+
+- **Rich Text**: 반드시 체크 (TMP Inspector의 Extra Settings)
+- **Overflow**: Overflow (잘리지 않게)
+- **Raycast Target**: 해제 (툴팁이 클릭을 가로채지 않도록)
+
+#### 5. Inspector 연결
+
+TooltipUI 컴포넌트에서:
+1. `mainTooltipRect` ← MainPanel
+2. 모든 TMP_Text 필드 연결 (nameText ~ sellPriceText)
+3. `comparePanel` ← ComparePanel GameObject
+4. `compareRect` ← ComparePanel RectTransform
+5. compare 텍스트 3개 연결
+6. `offset` = (20, -20), `screenPadding` = 8
+
+### 주의사항
+
+- **Content Size Fitter** + **Vertical Layout Group** 조합이 정확해야 툴팁 크기가 내용에 맞게 조절됨
+- 비어있는 텍스트 컴포넌트는 `gameObject.SetActive(false)`로 자동 숨김 → Layout에서 제외
+- `PointerMove`는 `Time.timeScale=0`에서도 정상 동작 (EventSystem 기반)
+- 모든 TMP_Text의 **Raycast Target을 해제**해야 툴팁이 마우스 이벤트를 가로채지 않음
+- Tooltip Canvas의 **Graphic Raycaster를 제거**하거나 비활성화 권장
