@@ -28,7 +28,7 @@ namespace RPGSystem.Core
         [Header("테스트 잼 (Inspector에서 GemData SO 드래그)")]
         [SerializeField] private GemData[] testGems;
 
-        [Header("키 바인딩")]
+        [Header("키 바인딩 - 아이템/스킬")]
         [SerializeField] private KeyCode addItemKey = KeyCode.F1;
         [SerializeField] private KeyCode removeItemKey = KeyCode.F2;
         [SerializeField] private KeyCode useItemKey = KeyCode.F3;
@@ -39,6 +39,12 @@ namespace RPGSystem.Core
         [SerializeField] private KeyCode printSkillsKey = KeyCode.F8;
         [SerializeField] private KeyCode useSkillKey = KeyCode.F9;
         [SerializeField] private KeyCode addSkillExpKey = KeyCode.F10;
+
+        [Header("키 바인딩 - UI 패널 토글")]
+        [SerializeField] private KeyCode toggleInventoryKey = KeyCode.I;
+        [SerializeField] private KeyCode toggleEquipmentKey = KeyCode.E;
+        [SerializeField] private KeyCode toggleSkillKey = KeyCode.K;
+        [SerializeField] private KeyCode closeAllPanelsKey = KeyCode.Backspace;
 
         [Header("설정")]
         [SerializeField] private int addAmount = 1;
@@ -59,6 +65,15 @@ namespace RPGSystem.Core
             if (Input.GetKeyDown(printSkillsKey)) DebugPrintSkills();
             if (Input.GetKeyDown(useSkillKey))   DebugUseFirstSkill();
             if (Input.GetKeyDown(addSkillExpKey)) DebugAddExpToFirstSkill();
+
+            // UI 패널 토글 (UIManager가 없을 때 독립 테스트용)
+            if (UIManager.Instance == null)
+            {
+                if (Input.GetKeyDown(toggleInventoryKey))  DebugToggleInventory();
+                if (Input.GetKeyDown(toggleEquipmentKey))  DebugToggleEquipment();
+                if (Input.GetKeyDown(toggleSkillKey))      DebugToggleSkill();
+            }
+            if (Input.GetKeyDown(closeAllPanelsKey))   DebugCloseAllPanels();
 
             // 숫자키 1~9로 테스트 아이템 선택
             for (int i = 0; i < 9 && i < testItems.Length; i++)
