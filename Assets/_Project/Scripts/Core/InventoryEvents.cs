@@ -105,6 +105,15 @@ namespace RPGSystem.Core
         public GemData gem;
     }
 
+    // ──────────────── 아이템 줍기 이벤트 ────────────────
+
+    /// <summary>월드에서 아이템을 주웠음</summary>
+    public struct ItemPickedUpEvent
+    {
+        public ItemData itemData;
+        public int amount;
+    }
+
     // ──────────────── 게임 상태 / UI 이벤트 ────────────────
 
     /// <summary>게임 상태가 변경됨 (Playing/UI/Paused)</summary>
